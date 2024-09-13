@@ -4,4 +4,3 @@ It implements read through cache strategy(i.e. it initially tries to read cache 
 As data is volatile I have used redis as it is simple,high performance and transient
 to Run it you need to
 1. Enter "docker-compose up -d"
-2. Enter "cargo run" in backend folder as comunnication between docker images currently does not work

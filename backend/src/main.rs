@@ -34,7 +34,8 @@ struct FQuery {
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let client = RedisClient::default();
+    let config = RedisConfig::from_url("redis://db:6379").unwrap();
+    let client = RedisClient::new(config, None, None, None);
     client.init().await.unwrap();
     RC.set(client).unwrap();
     let app = Router::new()
