@@ -114,6 +114,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "fred",
+ "futures",
  "serde",
  "serde_json",
  "time",

@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 axum = {version = "0.7.5",features=["macros"]}
 fred = {version = "9.2.1",features=["serde-json"]}
+futures = "0.3.30"
 serde = "1.0.210"
 serde_json = "1.0.128"
 time = {version= "0.3.36",features=["macros","parsing"]}
