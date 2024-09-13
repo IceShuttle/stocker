@@ -1,11 +1,10 @@
-use ::time::{macros::format_description, Date, OffsetDateTime};
+use ::time::macros::format_description;
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use time::Duration;
 use yahoo_finance_api::{self as yahoo};
 
-use axum::{extract::Query, http::StatusCode, routing::get, Json, Router};
+use axum::{extract::Path, http::StatusCode, routing::get, Json, Router};
 use fred::prelude::*;
 use tokio::{sync::OnceCell, task, time};
 
@@ -22,12 +21,7 @@ struct StockData {
 }
 #[derive(Serialize, Deserialize)]
 struct DayStockData {
-    data: HashMap<String, StockData>,
-}
-#[derive(Deserialize)]
-struct FQuery {
-    symbol: String,
-    day: Option<String>,
+    data: Vec<StockData>,
 }
 
 #[tokio::main]
@@ -40,17 +34,17 @@ async fn main() {
     RC.set(client).unwrap();
     let app = Router::new()
         .route("/", get(root))
-        .route("/fetch", get(fetch_price))
-        .route("/fetchday", get(fetch_price_day));
+        .route("/fetch/:symbol", get(fetch_price))
+        .route("/fetchday/:symbol", get(fetch_price_day));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    task::spawn(fetching_data());
+    // task::spawn(fetching_data());
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn fetch_price(Query(query): Query<FQuery>) -> Result<Json<StockData>, StatusCode> {
+async fn fetch_price(Path(symbol): Path<String>) -> Result<Json<StockData>, StatusCode> {
     let rc = RC.get().unwrap();
-    let final_symbol = format!("{}.NS", query.symbol);
+    let final_symbol = format!("{}.NS", symbol);
     let quote_str: Option<String> = rc.get(&final_symbol).await.unwrap();
     match quote_str {
         Some(val) => {
@@ -83,15 +77,10 @@ async fn fetch_price(Query(query): Query<FQuery>) -> Result<Json<StockData>, Sta
     }
 }
 
-async fn fetch_price_day(Query(query): Query<FQuery>) -> Result<Json<DayStockData>, StatusCode> {
+async fn fetch_price_day(Path(symbol): Path<String>) -> Result<Json<DayStockData>, StatusCode> {
     let rc = RC.get().unwrap();
-    let date = query.day.unwrap();
-    let format = format_description!(
-        "[year]-[month]-[day] [hour]:[minute]:[second] [offset_hour \
-        sign:mandatory]:[offset_minute]:[offset_second]"
-    );
-    let final_symbol = format!("{}.NS", query.symbol);
-    let key = format!("{}_{}", final_symbol, date);
+    let final_symbol = format!("{}.NS", symbol);
+    let key = format!("{}_day", final_symbol);
     let quote_str: Option<String> = rc.get(&key).await.unwrap();
     match quote_str {
         Some(val) => {
@@ -100,19 +89,12 @@ async fn fetch_price_day(Query(query): Query<FQuery>) -> Result<Json<DayStockDat
         }
         None => {
             let provider = yahoo::YahooConnector::new().unwrap();
-            println!("{} 00:00:00", date);
-            let start =
-                OffsetDateTime::parse(&format!("{} 00:00:00 +05:30:00", date), format).unwrap();
-            let end =
-                OffsetDateTime::parse(&format!("{} 23:59:59 +05:30:00", date), format).unwrap();
             let rep = provider
-                .get_quote_history_interval(&final_symbol, start, end, "1m")
+                .get_quote_range(&final_symbol, "1m", "1d")
                 .await
                 .unwrap();
             let quotes = rep.quotes().unwrap();
-            let mut qs = DayStockData {
-                data: HashMap::new(),
-            };
+            let mut qs = DayStockData { data: Vec::new() };
             for quote in quotes.into_iter() {
                 let sd = StockData {
                     symbol: final_symbol.clone(),
@@ -122,7 +104,7 @@ async fn fetch_price_day(Query(query): Query<FQuery>) -> Result<Json<DayStockDat
                     high: quote.high,
                     low: quote.low,
                 };
-                qs.data.insert(final_symbol.clone(), sd);
+                qs.data.push(sd);
             }
             let qstr = serde_json::to_string(&qs).unwrap();
             let _: () = rc.set(&key, &qstr, None, None, false).await.unwrap();
